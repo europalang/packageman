@@ -61,9 +61,10 @@ def editpkg():
     return f"the arg 'version' is required and was not provided", 400
   full_name = f"{name}_{version}"
   root = os.path.join("pkgs", ed.encode(full_name))
-  with open(os.path.join(root, "README.md"), "w") as f:
-    f.write(newcontent)
-  return "success"
+  content = None
+  with open(os.path.join(root, "README.md")) as f:
+    content = f.read()
+  return content
 
 @app.route('/pkg/make', methods=["GET", "POST"])
 def makepkg():
