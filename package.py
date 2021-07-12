@@ -1,5 +1,6 @@
 import os
 from ed import ed
+from update import update_replit
 
 class PackageError(Exception): pass
 class PackageNotFound(PackageError): pass
@@ -56,8 +57,10 @@ def is_bad(data):
 #    if not fparts[0] in free_to_edit:
 #      return True
   return False
-def make_pkg(username, name, data):
-  root = os.path.join("pkgs", ed.encode(name))
+
+def make_pkg(username, name, version, data):
+  full_name = f"{name}_{version}"
+  root = os.path.join("pkgs", ed.encode(full_name))
   if os.path.exists(root):
     raise NameTaken
   if is_bad(data):
@@ -67,10 +70,13 @@ def make_pkg(username, name, data):
   folders = data["folders"]
   for folder in folders:
     os.makedirs(os.path.join(root, folder), exist_ok=True)
+    update_replit()
   for filename in files:
     with open(root+filename, "w") as f:
       f.write(files[filename])
+    update_replit()
   info = os.path.join(root, 'info')
   os.makedirs(info,exist_ok=True)
   with open(os.path.join(info, "owner"), "w") as f:
     f.write(username)
+  update_replit()
