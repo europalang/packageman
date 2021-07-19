@@ -26,4 +26,4 @@ class encodedecode():
         newtext = newtext.replace(match, chr(n), 1)
     return newtext
 
-ed = encodedecode("/.\\") # This is just for this project, do not need to include if copying
+ed = encodedecode("/") # This is just for this project, do not need to include if copying

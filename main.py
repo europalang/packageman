@@ -1,12 +1,13 @@
 from ed import ed
 from update import update_replit
-from package import load_pkg, make_pkg, PackageError, PackageNotFound, FormatError, NameTaken
+from package import load_pkg, make_pkg, PackageError, PackageNotFound, FormatError, NameTaken, get_pkg_zip
 import random
-import shutil
 import os
 import json
-from flask import Flask, request, Response, abort, redirect
+import io
+from flask import Flask, request, Response, abort, redirect, send_file
 import requests
+import shutil
 class MyResponse(Response):
     default_mimetype = 'text/plain'
 app = Flask('app')
@@ -41,7 +42,7 @@ def home():
 
 @app.route('/pkg/get', methods=["GET", "POST"])
 def getpkg():
-  name = request.form.get("name", request.args.get("name"))
+  name = get("name")
   if name == None:
     return f"the arg 'name' is required and was not provided", 400
   try:
@@ -51,16 +52,21 @@ def getpkg():
   except Exception as e:
     return f"something went wrong, this is the python error\n{type(e).__name__}: {e}\nrolling back changes", 400
 
-@app.route('/pkg/get/readme', methods=["GET", "POST"])
-def editpkg():
+@app.route('/pkg/get/zip', methods=["GET", "POST"])
+def getpkgzip():
   name = get("name")
-  version = get("version")
   if name == None:
     return f"the arg 'name' is required and was not provided", 400
-  elif version == None:
-    return f"the arg 'version' is required and was not provided", 400
-  full_name = f"{name}_{version}"
-  root = os.path.join("pkgs", ed.encode(full_name))
+  zippath, mimetype, download_name, as_attachment = get_pkg_zip(name)
+  return send_file(zippath,mimetype = mimetype,download_name=download_name,as_attachment = as_attachment)
+  
+
+@app.route('/pkg/get/readme', methods=["GET", "POST"])
+def getpkgreadme():
+  name = get("name")
+  if name == None:
+    return f"the arg 'name' is required and was not provided", 400
+  root = os.path.join("pkgs", ed.encode(name))
   content = None
   with open(os.path.join(root, "README.md")) as f:
     content = f.read()
@@ -70,67 +76,75 @@ def editpkg():
 def makepkg():
   requires_auth(get("token"))
   name = get("name")
-  version = get("version")
   username = get("username")
   data = json.loads(get("data"))
   if name == None:
     return f"the arg 'name' is required and was not provided", 400
-  elif version == None:
-    return f"the arg 'version' is required and was not provided", 400
   elif username == None:
     return f"the arg 'username' is required and was not provided", 400
   elif data == None:
     return f"the arg 'data' is required and was not provided", 400
   try:
-    make_pkg(username, name, version, data)
+    make_pkg(username, name, data)
   except NameTaken:
     return "name taken", 400
   except FormatError:
     return "format is not met", 400
   except Exception as e:
-    shutil.rmtree(os.path.join("pkgs", ed.encode(f"{name}_{version}")))
-    os.system("replit push") 
-    return f"something went wrong, this is the python error\n{type(e).__name__}: {e}\nrolling back changes", 400
+    try:
+      shutil.rmtree(os.path.join("pkgs", ed.encode(name)))
+    except Exception:
+      pass
+    update_replit()
+    return f"something went wrong, this is the python error\n{type(e).__name__}: {e}\nrolling back changes", 500
   return "success"
 
 @app.route('/pkg/edit/readme', methods=["GET", "POST"])
-def editpkg():
+def editpkgreadme():
   requires_auth(get("token"))
   name = get("name")
-  version = get("version")
   username = get("username")
-  newcontent = json.loads(get("newcontent"))
+  content = get("content")
   if name == None:
     return f"the arg 'name' is required and was not provided", 400
-  elif version == None:
-    return f"the arg 'version' is required and was not provided", 400
   elif username == None:
     return f"the arg 'username' is required and was not provided", 400
-  elif newcontent == None:
-    return f"the arg 'newcontent' is required and was not provided", 400
-  full_name = f"{name}_{version}"
-  root = os.path.join("pkgs", ed.encode(full_name))
-  with open(os.path.join(root, "README.md"), "w") as f:
-    f.write(newcontent)
-  return "success"
+  elif content == None:
+    return f"the arg 'content' is required and was not provided", 400
+  root = os.path.join("pkgs", ed.encode(name))
+  info = json.load(open(os.path.join(root, "info.json")))
+  if username == info["owner"]:
+    with open(os.path.join(root, "README.md"), "w") as f:
+      f.write(content)
+    return "success"
+  else:
+    return "user is not the owner of this project", 403
+
+@app.route('/pkg/list', methods=["GET", "POST"])
+def getpkglist():
+  length = get("length")
+  if length == None:
+    return f"the arg 'length' is required and was not provided", 400
+  elif not length.isdigit():
+    return f"the arg 'length' needs to be a vaild number", 400
+  length = int(length)
+  l = []
+  n = 0
+  for f in os.scandir('pkgs'):
+    if n==length:
+      return json.dumps(l)
+    if f.is_dir():
+      l.append(f.name)
+      n+=1
+  if n==length:
+      return json.dumps(l)
+  return 'that is more than the amount of listings', 400
+  
 
 # docs
-@app.route('/<path:path>/docs')
-def _docs(path):
-  url = f"https://justa6.repl.co/projects/europalang/docs/{path}"
-  if url_exists(url):
-    return redirect(url)
-  else:
-    npath = path
-    while not url_exists(url):
-      npath = "/".join(npath.split("/")[0:-1])
-      if npath == "/" or npath == "":
-        abort(404)
-      url = f"https://justa6.repl.co/projects/europalang/docs/{npath}"
-  return redirect(url)
 @app.route('/docs')
 def docs():
-  return redirect("https://justa6.repl.co/projects/europalang/docs")
+  return redirect("https://europa-docs.europalang.repl.co/Package%20Manager")
 
 @app.errorhandler(403)
 def forbidden(e):

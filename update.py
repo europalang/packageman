@@ -1,7 +1,10 @@
 from threading import Thread
 def update_replit():
   def run():
-    import os
-    os.system("replit push")
+    try:
+      import os
+      os.system("replit push")
+    except:
+      pass
   t = Thread(target=run)
   t.start()
